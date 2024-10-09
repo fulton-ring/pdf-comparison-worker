@@ -7,4 +7,4 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD ["fastapi", "dev", "worker/app.py"]
+CMD ["celery", "--app=worker.app", "worker", "--loglevel=info"]

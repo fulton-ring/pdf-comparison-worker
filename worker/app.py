@@ -2,12 +2,14 @@ from celery import Celery
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from worker.config import REDIS_HOST, REDIS_PORT, REDIS_DB
+
 # app = FastAPI()
 
 app = Celery(
     "worker",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker=f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}",
+    backend=f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}",
 )
 
 
