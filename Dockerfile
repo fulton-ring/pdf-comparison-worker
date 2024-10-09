@@ -23,4 +23,4 @@ RUN poetry config virtualenvs.create false \
 COPY . .
 RUN poetry install --no-interaction --no-ansi
 
-CMD ["celery", "--app=worker.app", "worker", "--loglevel=info"]
+CMD ["poetry", "run", "celery", "--app=worker.app", "worker", "--loglevel=info"]
