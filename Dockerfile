@@ -2,9 +2,25 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Install poetry
+RUN pip install poetry==1.6.1
+
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_CREATE=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+# Copy pyproject.toml and poetry.lock
+COPY pyproject.toml poetry.lock README.md ./
+
+RUN mkdir -p worker
+RUN touch worker/__init__.py
+
+# Install dependencies using poetry
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi
 
 COPY . .
+RUN poetry install --no-interaction --no-ansi
 
 CMD ["celery", "--app=worker.app", "worker", "--loglevel=info"]
