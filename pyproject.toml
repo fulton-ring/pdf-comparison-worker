@@ -9,8 +9,8 @@ packages = [{include = "worker"}]
 [tool.poetry.dependencies]
 python = "^3.11"
 celery = {extras = ["redis"], version = "^5.4.0"}
-fastapi = {extras = ["standard"], version = "^0.115.0"}
 redis = "^5.1.1"
+pydantic = "^2.9.2"
 
 
 [build-system]
