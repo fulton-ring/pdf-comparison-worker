@@ -11,6 +11,12 @@ python = "^3.11"
 celery = {extras = ["redis"], version = "^5.4.0"}
 redis = "^5.1.1"
 pydantic = "^2.9.2"
+s3fs = "^2024.9.0"
+supabase = "^2.9.0"
+pymupdf = "^1.24.11"
+fastapi = "^0.115.0"
+modal = "^0.64.178"
+transformers = "^4.45.2"
 
 
 [build-system]
