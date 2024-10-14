@@ -1,17 +1,49 @@
 import base64
+import tempfile
+import os
+import io
 
 # from anthropic import AsyncAnthropicBedrock, RateLimitError
 import fitz
+from PIL import Image
 
 # import s3fs
 
 from worker import clients, config
+from worker.model import get_model, get_processor
+from worker.types import ParseJob
+
+
+def process_vision_info(messages, images):
+    processor = get_processor()
+    model = get_model()
+
+    # Preprocess the inputs
+    text_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+    # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n'
+
+    # Preparation for inference
+    inputs = processor(
+        text=[text_prompt], images=images, padding=True, return_tensors="pt"
+    )
+    inputs = inputs.to("cuda")
+
+    # Inference: Generation of the output
+    output_ids = model.generate(**inputs, max_new_tokens=4096)
+    generated_ids = [
+        output_ids[len(input_ids) :]
+        for input_ids, output_ids in zip(inputs.input_ids, output_ids)
+    ]
+
+    return processor.batch_decode(
+        generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+    )
 
 
 def download_file(source: str, destination: str):
     with open(destination, "wb+") as fp:
         res = clients.supabase.storage.from_(
-            config.SUPABASE_BUCKET,
+            config.SUPABASE_UPLOADS_BUCKET,
         ).download(source)
         fp.write(res)
 
@@ -19,17 +51,25 @@ def download_file(source: str, destination: str):
 def upload_file(source: str, destination: str):
     with open(source, "rb") as fp:
         clients.supabase.storage.from_(
-            config.SUPABASE_BUCKET,
+            config.SUPABASE_JOBS_BUCKET,
         ).upload(destination, fp)
 
 
-def convert_page_to_markdown(image_encoded_string: str):
-    return ""
+def convert_page_to_markdown(image: Image.Image):
+    return process_vision_info(
+        [
+            {
+                "role": "user",
+                "content": "Convert this image of a page from a PDF into markdown.",
+            }
+        ],
+        [image],
+    )
 
 
 def correct_page_overlap(last_page: str, current_page: str):
-    last_page = ""
-    current_page = ""
+    # last_page = ""
+    # current_page = ""
 
     return last_page, current_page
 
@@ -37,24 +77,81 @@ def correct_page_overlap(last_page: str, current_page: str):
 def convert_document(input_file_path: str):
     doc = fitz.open(input_file_path)
     last_page = None
+    page_counter = 0
 
     for page in doc:
         pix = page.get_pixmap()  # type: ignore
 
-        encoded_string_bytes = base64.b64encode(pix.tobytes())
+        image = Image.open(io.BytesIO(pix.tobytes()))
+        # print("width:", image.width)
+        # print("height:", image.height)
+
+        # image.resize((width, height))
+        new_width = min(((image.width + 27) // 28) * 28, 16384)
+        new_height = min(((image.height + 27) // 28) * 28, 16384)
+
+        image.resize((new_width, new_height))
+        # encoded_string_bytes = base64.b64encode(pix.tobytes())
 
         current_page = convert_page_to_markdown(
-            encoded_string_bytes.decode("utf-8"),
+            # encoded_string_bytes.decode("utf-8"),
+            image
         )
 
-        if last_page:
+        if last_page is not None:
             last_page, current_page = correct_page_overlap(last_page, current_page)
-            # Upload the corrected last page
-            # upload_file(last_page, f"page_{page.number - 1}.md")
+            yield (last_page, f"page_{page_counter}.md")
 
         last_page = current_page
+        page_counter += 1
 
-    # TODO: upload last page
+    if last_page is not None:
+        yield (last_page, f"page_{page_counter}.md")
+
+
+def process_remote_document(job: ParseJob):
+    with tempfile.TemporaryDirectory() as tempdir:
+        # download source file
+        source_file_path = os.path.join(tempdir, os.path.basename(job.source_file))
+
+        download_file(job.source_file, source_file_path)
+        page_contents = []
+
+        # convert to markdown
+        # upload each page to remote storage
+        for page, title in convert_document(source_file_path):
+            page_contents.append(page)
+            print("page contents:", page)
+
+            # with open(os.path.join(tempdir, title), "w") as fp:
+            #     print("page:", title)
+            #     fp.write(page)
+            #     upload_file(
+            #         fp.name,
+            #         os.path.join(
+            #             "jobs",
+            #             job.job_id,
+            #             title,
+            #         ),
+            #     )
+
+        # upload final document to remote storage
+        final_document_path = os.path.join(tempdir, f"{job.job_id}.md")
+
+        with open(final_document_path, "w") as fp:
+            print("page contents:", page_contents)
+            fp.write("\n".join(page_contents))
+            # TODO: upload all docs + final doc as batch
+            print("final document:", final_document_path)
+
+        upload_file(
+            final_document_path,
+            os.path.join(
+                "jobs",
+                job.job_id,
+                f"{job.job_id}.md",
+            ),
+        )
 
 
 # async def convert_pdf_page_markdown(page: pymupdf.Page, semaphore: asyncio.Semaphore):

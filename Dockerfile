@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -11,7 +11,9 @@ ENV POETRY_NO_INTERACTION=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
 # Copy pyproject.toml and poetry.lock
-COPY pyproject.toml poetry.lock README.md ./
+COPY pyproject.toml ./
+COPY poetry.lock ./
+COPY README.md ./
 
 RUN mkdir -p worker
 RUN touch worker/__init__.py

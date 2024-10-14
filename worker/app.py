@@ -1,7 +1,7 @@
 from celery import Celery
-from pydantic import BaseModel
 
 from worker.config import REDIS_HOST, REDIS_PORT, REDIS_DB
+from worker.types import ParseJob
 
 app = Celery(
     "worker",
@@ -10,12 +10,8 @@ app = Celery(
 )
 
 
-class ParseRequest(BaseModel):
-    pdf_path: str
-
-
 @app.task
-def process_pdf(pdf_path: str):
+def process_pdf(request: ParseJob):
     # TODO: for each page in PDF, generate image
     # TODO: for each image, run OCR
     # TODO: for each OCR result, run layout detection
@@ -25,5 +21,5 @@ def process_pdf(pdf_path: str):
     # TODO: update status as pages are processed
     # TODO: upload parsed pages to S3
     # TODO: upload final document to S3
-    print("processing pdf:", pdf_path)
+    print("processing pdf:", request.source_file)
     return "processed"

@@ -4,41 +4,26 @@ import fastapi
 from modal.functions import FunctionCall
 import modal
 
-
-MODEL_NAME = "Qwen/Qwen2-VL-7B-Instruct-AWQ"
-
-
-def download_models():
-    import os
-    from transformers import Qwen2VLForConditionalGeneration
-
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-        MODEL_NAME,
-        torch_dtype="auto",
-        # torch_dtype=torch.bfloat16,
-        # attn_implementation="flash_attention_2",
-        device_map="auto",
-        # device_map="cuda:0",
-        token=os.environ["HF_TOKEN"],
-    )
-
-    model.save_pretrained("/model")
-
+from worker.model import get_model
 
 image = (
     modal.Image.debian_slim(python_version="3.10")
+    .poetry_install_from_file("pyproject.toml", poetry_lockfile="poetry.lock")
     .pip_install(
         "transformers==4.45.*",
         # "opencv-python",
         "pymupdf",
         "qwen-vl-utils",
-        "autoawq",  # NOTE: autoaws requires python 3.10
+        "autoawq",  # NOTE: autoawq requires python 3.10
         "torchvision==0.19.*",
         "torch==2.4.*",
     )
     .run_function(
-        download_models,
-        secrets=[modal.Secret.from_name("huggingface")],
+        get_model,
+        secrets=[
+            modal.Secret.from_name("huggingface"),
+            modal.Secret.from_name("supabase"),
+        ],
         gpu="A100",
     )
 )
@@ -55,12 +40,14 @@ def fastapi_app():
 
 @app.function(
     image=image,
-    secrets=[modal.Secret.from_name("huggingface")],
+    secrets=[
+        modal.Secret.from_name("huggingface"),
+        modal.Secret.from_name("supabase"),
+    ],
     gpu="A100",
     container_idle_timeout=15,
 )
 def process_job(data):
-    # Perform the job processing here
     return {"result": data}
 
 
