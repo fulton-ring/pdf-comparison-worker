@@ -10,34 +10,8 @@ from PIL import Image
 # import s3fs
 
 from worker import clients, config
-from worker.model import get_model, get_processor
+from worker.model import process_vision_info
 from worker.types import ParseJob
-
-
-def process_vision_info(messages, images):
-    processor = get_processor()
-    model = get_model()
-
-    # Preprocess the inputs
-    text_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-    # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n'
-
-    # Preparation for inference
-    inputs = processor(
-        text=[text_prompt], images=images, padding=True, return_tensors="pt"
-    )
-    inputs = inputs.to("cuda")
-
-    # Inference: Generation of the output
-    output_ids = model.generate(**inputs, max_new_tokens=4096)
-    generated_ids = [
-        output_ids[len(input_ids) :]
-        for input_ids, output_ids in zip(inputs.input_ids, output_ids)
-    ]
-
-    return processor.batch_decode(
-        generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
-    )
 
 
 def download_file(source: str, destination: str):
