@@ -14,38 +14,111 @@ from worker.model import process_vision_info
 from worker.types import ParseJob
 
 
+CONVERSTION_PROMPT = """
+Convert this image of a page from a PDF into markdown.
+Make sure the tables are valid markdown tables.
+Do not include content that isn't part of the image.
+Use ```markdown ...``` to format the markdown.
+"""
+
+CORRECT_PAGE_OVERLAP_PROMPT = """
+Check if the current page starts with a table that continued from the previous page.
+If it does, correct the current and previous pages.
+
+Use ```markdown``` to format the markdown.
+"""
+
+
 def download_file(source: str, destination: str):
+    supabase_client = clients.get_supabase_client()
+
     with open(destination, "wb+") as fp:
-        res = clients.supabase.storage.from_(
+        res = supabase_client.storage.from_(
             config.SUPABASE_UPLOADS_BUCKET,
         ).download(source)
         fp.write(res)
 
 
 def upload_file(source: str, destination: str):
+    supabase_client = clients.get_supabase_client()
+
     with open(source, "rb") as fp:
-        clients.supabase.storage.from_(
+        supabase_client.storage.from_(
             config.SUPABASE_JOBS_BUCKET,
         ).upload(destination, fp)
 
 
+def parse_markdown_page(page: str):
+    markdown_blocks = []
+    start_index = 0
+
+    while True:
+        new_start_index = page.find("```markdown", start_index)
+
+        if new_start_index == -1:
+            new_start_index = page.find("```", start_index)
+
+        if new_start_index == -1:
+            break  # No more markdown blocks found
+
+        new_start_index = (
+            page.find("\n", new_start_index) + 1
+        )  # Move to the next line after the opening ```
+
+        end_index = page.find("```", new_start_index)
+        if end_index == -1:
+            markdown_blocks.append(page[new_start_index:].strip())
+            break  # No closing ```, use the rest of the page
+
+        markdown_blocks.append(page[new_start_index:end_index].strip())
+        start_index = end_index + 3  # Move past the closing ```
+
+    return markdown_blocks
+
+
 def convert_page_to_markdown(image: Image.Image):
-    return process_vision_info(
+    outputs = process_vision_info(
         [
             {
                 "role": "user",
-                "content": "Convert this image of a page from a PDF into markdown.",
+                "content": [
+                    {
+                        "type": "image",
+                        "resized_height": image.height,
+                        "resized_width": image.width,
+                    },
+                    {"type": "text", "text": CONVERSTION_PROMPT},
+                ],
             }
         ],
         [image],
     )
 
+    return parse_markdown_page(outputs[0])[0]
+
 
 def correct_page_overlap(last_page: str, current_page: str):
-    # last_page = ""
-    # current_page = ""
+    outputs = process_vision_info(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": CORRECT_PAGE_OVERLAP_PROMPT},
+                    {"type": "text", "text": f"Last page: {last_page}"},
+                    {"type": "text", "text": f"Current page: {current_page}"},
+                ],
+            }
+        ],
+        None,
+    )
 
-    return last_page, current_page
+    print("corrected_pages:", outputs)
+    corrected_pages = parse_markdown_page(outputs[0])
+
+    if len(corrected_pages) != 2:
+        return last_page, current_page
+
+    return corrected_pages[0], corrected_pages[1]
 
 
 def convert_document(input_file_path: str):
@@ -96,6 +169,8 @@ def process_remote_document(job: ParseJob):
         for page, title in convert_document(source_file_path):
             page_contents.append(page)
             print("page contents:", page)
+
+            # TODO: post status updates
 
             # with open(os.path.join(tempdir, title), "w") as fp:
             #     print("page:", title)

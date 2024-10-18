@@ -4,7 +4,8 @@ import fastapi
 from modal.functions import FunctionCall
 import modal
 
-from worker.model import get_model
+from worker.model import download_model
+from worker.types import ParseJob
 
 image = (
     modal.Image.debian_slim(python_version="3.10")
@@ -19,7 +20,7 @@ image = (
         "torch==2.4.*",
     )
     .run_function(
-        get_model,
+        download_model,
         secrets=[
             modal.Secret.from_name("huggingface"),
             modal.Secret.from_name("supabase"),
@@ -47,15 +48,18 @@ def fastapi_app():
     gpu="A100",
     container_idle_timeout=15,
 )
-def process_job(data):
-    return {"result": data}
+def process_job(job: ParseJob):
+    from worker.processor import process_remote_document
+
+    process_remote_document(job)
+    return {"result": "success"}
 
 
 @web_app.post("/submit")
-async def submit_job_endpoint(data):
+async def submit_job_endpoint(job: ParseJob):
     process_job = modal.Function.lookup("pdf-comparison", "process_job")
 
-    call = process_job.spawn(data)
+    call = process_job.spawn(job)
     return {"call_id": call.object_id}
 
 
@@ -75,7 +79,12 @@ async def get_job_result_endpoint(call_id: str):
 # NOTE: should run this before serving to seed the model
 @app.local_entrypoint()
 def main():
-    data = "my-data"
+    data = ParseJob(
+        job_id="123",
+        output_format="markdown",
+        # source_file="uploads/business-cards.pdf",
+        source_file="uploads/ucirvine_2023.pdf",
+    )
 
     # Submit the job to Modal
     process_job = modal.Function.lookup("pdf-comparison", "process_job")

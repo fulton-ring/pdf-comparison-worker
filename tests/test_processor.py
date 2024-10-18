@@ -1,5 +1,5 @@
 from worker.types import ParseJob
-from worker.processor import process_remote_document
+from worker.processor import process_remote_document, parse_markdown_page
 
 
 def test_process_remote_document():
@@ -11,3 +11,29 @@ def test_process_remote_document():
 
     process_remote_document(request)
     assert False
+
+
+def test_parse_markdown_page():
+    page = """
+```markdown
+# hello
+## world
+```
+"""
+    assert parse_markdown_page(page) == [
+        """# hello
+## world"""
+    ]
+
+
+def test_parse_markdown_page_no_markdown():
+    page = """
+```
+# hello
+## world
+```
+"""
+    assert parse_markdown_page(page) == [
+        """# hello
+## world"""
+    ]
