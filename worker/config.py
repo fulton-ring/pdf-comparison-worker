@@ -12,3 +12,8 @@ SUPABASE_URL: str = os.getenv("SUPABASE_URL")
 SUPABASE_PRIVATE_KEY: str = os.getenv("SUPABASE_PRIVATE_KEY")
 SUPABASE_UPLOADS_BUCKET: str = os.getenv("SUPABASE_UPLOADS_BUCKET", "uploads")
 SUPABASE_JOBS_BUCKET: str = os.getenv("SUPABASE_JOBS_BUCKET", "jobs")
+
+INFERENCE_API_ENDPOINT: str = os.getenv(
+    "INFERENCE_API_ENDPOINT",
+    "https://herzo175--pdf-comparison-model-generate.modal.run",
+)

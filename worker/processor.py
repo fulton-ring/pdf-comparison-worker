@@ -6,12 +6,17 @@ import io
 # from anthropic import AsyncAnthropicBedrock, RateLimitError
 import fitz
 from PIL import Image
+import requests
 
 # import s3fs
 
 from worker import clients, config
-from worker.model import process_vision_info
-from worker.types import ParseJob
+from worker.types import (
+    InferenceMessage,
+    InferenceMessageContent,
+    ParseJob,
+    InferenceRequest,
+)
 
 
 CONVERSTION_PROMPT = """
@@ -48,6 +53,20 @@ def upload_file(source: str, destination: str):
         ).upload(destination, fp)
 
 
+def call_inference_api(request: InferenceRequest):
+    # TODO: add retries
+    try:
+        response = requests.post(
+            config.INFERENCE_API_ENDPOINT, data=request.model_dump_json()
+        )
+
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print("Error calling inference API:", e)
+        raise e
+
+
 def parse_markdown_page(page: str):
     markdown_blocks = []
     start_index = 0
@@ -76,44 +95,60 @@ def parse_markdown_page(page: str):
     return markdown_blocks
 
 
-def convert_page_to_markdown(image: Image.Image):
-    outputs = process_vision_info(
-        [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "resized_height": image.height,
-                        "resized_width": image.width,
-                    },
-                    {"type": "text", "text": CONVERSTION_PROMPT},
-                ],
-            }
-        ],
-        [image],
+def convert_page_to_markdown(
+    # image: Image.Image,
+    image_base64_string: str,
+):
+    response = call_inference_api(
+        request=InferenceRequest(
+            messages=[
+                InferenceMessage(
+                    role="user",
+                    content=[
+                        InferenceMessageContent(
+                            type="image",
+                            image=image_base64_string,
+                            # image=f"data:image;base64,{base64.b64encode(image.tobytes()).decode('utf-8')}",
+                            # resized_height=image.height,
+                            # resized_width=image.width,
+                        ),
+                        InferenceMessageContent(
+                            type="text",
+                            text=CONVERSTION_PROMPT,
+                        ),
+                    ],
+                )
+            ],
+        )
     )
 
-    return parse_markdown_page(outputs[0])[0]
+    return parse_markdown_page(response["outputs"][0])[0]
 
 
 def correct_page_overlap(last_page: str, current_page: str):
-    outputs = process_vision_info(
-        [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": CORRECT_PAGE_OVERLAP_PROMPT},
-                    {"type": "text", "text": f"Last page: {last_page}"},
-                    {"type": "text", "text": f"Current page: {current_page}"},
-                ],
-            }
-        ],
-        None,
+    response = call_inference_api(
+        request=InferenceRequest(
+            messages=[
+                InferenceMessage(
+                    role="user",
+                    content=[
+                        InferenceMessageContent(
+                            type="text", text=CORRECT_PAGE_OVERLAP_PROMPT
+                        ),
+                        InferenceMessageContent(
+                            type="text", text=f"Last page: {last_page}"
+                        ),
+                        InferenceMessageContent(
+                            type="text", text=f"Current page: {current_page}"
+                        ),
+                    ],
+                )
+            ],
+        )
     )
 
-    print("corrected_pages:", outputs)
-    corrected_pages = parse_markdown_page(outputs[0])
+    print("corrected_pages:", response["outputs"])
+    corrected_pages = parse_markdown_page(response["outputs"][0])
 
     if len(corrected_pages) != 2:
         return last_page, current_page
@@ -130,27 +165,40 @@ def convert_document(input_file_path: str):
         pix = page.get_pixmap()  # type: ignore
 
         image = Image.open(io.BytesIO(pix.tobytes()))
-        # print("width:", image.width)
-        # print("height:", image.height)
 
-        # image.resize((width, height))
         new_width = min(((image.width + 27) // 28) * 28, 16384)
         new_height = min(((image.height + 27) // 28) * 28, 16384)
 
-        image.resize((new_width, new_height))
+        # pix = fitz.Pixmap(pix, new_width, new_height)
+
+        # image = image.copy()
         # encoded_string_bytes = base64.b64encode(pix.tobytes())
 
-        current_page = convert_page_to_markdown(
-            # encoded_string_bytes.decode("utf-8"),
-            image
-        )
+        with tempfile.TemporaryFile() as temp_file:
+            image.save(temp_file, format="PNG")
 
-        if last_page is not None:
-            last_page, current_page = correct_page_overlap(last_page, current_page)
-            yield (last_page, f"page_{page_counter}.md")
+            temp_file.seek(0)
+            encoded_string_bytes = base64.b64encode(temp_file.read())
+            # The image is loaded into memory, but the file handle is closed
+            # We need to create a copy to ensure it persists after the temp file is removed
+            # image = Image.open(temp_file).copy()
 
-        last_page = current_page
-        page_counter += 1
+        try:
+            current_page = convert_page_to_markdown(
+                f"data:image;base64,{encoded_string_bytes.decode('utf-8')}",
+                # image
+            )
+
+            if last_page is not None:
+                last_page, current_page = correct_page_overlap(last_page, current_page)
+                yield (last_page, f"page_{page_counter}.md")
+
+            last_page = current_page
+            page_counter += 1
+        except Exception as e:
+            print(f"Error processing page {page_counter}: {str(e)}")
+            # Skip this page and continue with the next one
+            continue
 
     if last_page is not None:
         yield (last_page, f"page_{page_counter}.md")
