@@ -39,7 +39,7 @@ image = (
 
 @app.cls(
     gpu="A100",
-    timeout=30,
+    timeout=60,
     container_idle_timeout=15,
     allow_concurrent_inputs=1,
     image=image,

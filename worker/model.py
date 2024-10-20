@@ -7,27 +7,11 @@ MODEL_CACHE_PATH = "/model"
 PROCESSOR_CACHE_PATH = "/processor"
 MODEL_NAME = "Qwen/Qwen2-VL-7B-Instruct-AWQ"
 
-# MODEL = None
-# PROCESSOR = None
-
 
 def get_model():
     import os
     from transformers import Qwen2VLForConditionalGeneration
 
-    # if MODEL is None:
-    #     MODEL = Qwen2VLForConditionalGeneration.from_pretrained(
-    #         MODEL_NAME,
-    #         torch_dtype="auto",
-    #         # torch_dtype=torch.bfloat16,
-    #         # attn_implementation="flash_attention_2",
-    #         device_map="auto",
-    #         # device_map="cuda:0",
-    #         token=os.environ["HF_TOKEN"],
-    #         cache_dir=MODEL_CACHE_PATH,
-    #     )
-
-    # return MODEL
     return Qwen2VLForConditionalGeneration.from_pretrained(
         MODEL_NAME,
         torch_dtype="auto",
@@ -43,19 +27,6 @@ def get_model():
 def get_processor():
     from transformers import AutoProcessor
 
-    # global PROCESSOR
-
-    # if PROCESSOR is None:
-    #     PROCESSOR = AutoProcessor.from_pretrained(
-    #         MODEL_NAME,
-    #         # min_pixels=min_pixels,
-    #         # max_pixels=max_pixels,
-    #         cache_dir=PROCESSOR_CACHE_PATH,
-    #     )
-
-    #     # PROCESSOR.save_pretrained(PROCESSOR_CACHE_PATH)
-
-    # return PROCESSOR
     return AutoProcessor.from_pretrained(
         MODEL_NAME,
         # min_pixels=min_pixels,
@@ -83,7 +54,6 @@ def run_inference(
     processor: AutoProcessor,
     model: AutoModel,
 ) -> List[str]:
-    print("messages:", messages)
     # Preprocess the inputs
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True

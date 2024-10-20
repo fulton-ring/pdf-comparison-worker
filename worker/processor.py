@@ -67,6 +67,17 @@ def call_inference_api(request: InferenceRequest):
         raise e
 
 
+def update_status(job_id: str, status: str):
+    try:
+        response = requests.put(
+            f"{config.API_ENDPOINT}/api/jobs/{job_id}", json={"status": status}
+        )
+        print("updated status:", status)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print("Error updating job status:", e)
+
+
 def parse_markdown_page(page: str):
     markdown_blocks = []
     start_index = 0
@@ -210,6 +221,7 @@ def process_remote_document(job: ParseJob):
         source_file_path = os.path.join(tempdir, os.path.basename(job.source_file))
 
         download_file(job.source_file, source_file_path)
+        update_status(job.job_id, "processing")
         page_contents = []
 
         # convert to markdown
@@ -217,6 +229,7 @@ def process_remote_document(job: ParseJob):
         for page, title in convert_document(source_file_path):
             page_contents.append(page)
             print("page contents:", page)
+            update_status(job.job_id, f"processed {title}")
 
             # TODO: post status updates
 
@@ -233,6 +246,7 @@ def process_remote_document(job: ParseJob):
             #     )
 
         # upload final document to remote storage
+        update_status(job.job_id, "uploading final document")
         final_document_path = os.path.join(tempdir, f"{job.job_id}.md")
 
         with open(final_document_path, "w") as fp:

@@ -17,3 +17,5 @@ INFERENCE_API_ENDPOINT: str = os.getenv(
     "INFERENCE_API_ENDPOINT",
     "https://herzo175--pdf-comparison-model-generate.modal.run",
 )
+
+API_ENDPOINT: str = os.getenv("API_ENDPOINT", "http://localhost:3000")
