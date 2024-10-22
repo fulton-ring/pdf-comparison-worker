@@ -50,7 +50,7 @@ def upload_file(source: str, destination: str):
     with open(source, "rb") as fp:
         supabase_client.storage.from_(
             config.SUPABASE_JOBS_BUCKET,
-        ).upload(destination, fp)
+        ).upload(destination, fp, file_options={"cacheControl": "max-age=60"})
 
 
 def call_inference_api(request: InferenceRequest):
