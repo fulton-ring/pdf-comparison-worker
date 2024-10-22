@@ -12,9 +12,16 @@ def download_model():
 
 app = modal.App("pdf-comparison", secrets=[modal.Secret.from_name("huggingface")])
 
+cuda_version = "12.4.0"  # should be no greater than host CUDA version
+flavor = "devel"  #  includes full CUDA toolkit
+operating_sys = "ubuntu22.04"
+tag = f"{cuda_version}-{flavor}-{operating_sys}"
+
 image = (
-    modal.Image.debian_slim(python_version="3.10")
+    # modal.Image.debian_slim(python_version="3.10")
+    modal.Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.10")
     # .poetry_install_from_file("pyproject.toml", poetry_lockfile="poetry.lock")
+    .apt_install("git")
     .pip_install(
         "transformers==4.45.*",
         "pillow",
@@ -26,7 +33,12 @@ image = (
         "torch==2.4.*",
         "fastapi[standard]==0.115.*",
         "pydantic==2.9.*",
-    ).run_function(
+        "ninja",
+        "packaging",
+        "wheel",
+    )
+    .pip_install("flash-attn==2.6.*", extra_options="--no-build-isolation")
+    .run_function(
         download_model,
         secrets=[
             modal.Secret.from_name("huggingface"),

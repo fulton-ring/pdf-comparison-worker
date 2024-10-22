@@ -2,6 +2,7 @@ from typing import Optional, List, Dict
 
 from transformers import AutoProcessor, AutoModel
 from qwen_vl_utils import process_vision_info
+import torch
 
 MODEL_CACHE_PATH = "/model"
 PROCESSOR_CACHE_PATH = "/processor"
@@ -14,9 +15,9 @@ def get_model():
 
     return Qwen2VLForConditionalGeneration.from_pretrained(
         MODEL_NAME,
-        torch_dtype="auto",
-        # torch_dtype=torch.bfloat16,
-        # attn_implementation="flash_attention_2",
+        # torch_dtype="auto",
+        torch_dtype=torch.bfloat16,
+        attn_implementation="flash_attention_2",
         device_map="auto",
         # device_map="cuda:0",
         token=os.environ["HF_TOKEN"],
