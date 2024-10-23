@@ -57,7 +57,9 @@ def call_inference_api(request: InferenceRequest):
     # TODO: add retries
     try:
         response = requests.post(
-            config.INFERENCE_API_ENDPOINT, data=request.model_dump_json()
+            config.INFERENCE_API_ENDPOINT,
+            data=request.model_dump_json(),
+            timeout=30,
         )
 
         response.raise_for_status()
@@ -70,7 +72,8 @@ def call_inference_api(request: InferenceRequest):
 def update_status(job_id: str, status: str):
     try:
         response = requests.put(
-            f"{config.API_ENDPOINT}/api/jobs/{job_id}", json={"status": status}
+            f"{config.API_ENDPOINT}/api/jobs/{job_id}",
+            json={"status": status},
         )
         print("updated status:", status)
         response.raise_for_status()

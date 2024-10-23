@@ -50,8 +50,8 @@ image = (
 
 
 @app.cls(
-    gpu="A100",
-    timeout=60,
+    gpu="A100:1",
+    timeout=30,
     container_idle_timeout=15,
     allow_concurrent_inputs=1,
     image=image,
@@ -68,10 +68,7 @@ class Model:
     @modal.web_endpoint(method="POST", docs=True)
     def generate(self, request: InferenceRequest):
         from worker.model import run_inference
-        import pydantic
 
-        print(pydantic.__version__)
-        print(request.model_dump(exclude_none=True))
         request_dict = request.model_dump(exclude_none=True)
 
         outputs = run_inference(
